@@ -1,26 +1,32 @@
 // @flow
 
-import { Component, createElement } from 'react'
+import hoist from 'hoist-non-react-statics'
 import PropTypes from 'prop-types'
-
-import type { Theme } from './ThemeProvider'
+import { Component, createElement } from 'react'
+import { CONTEXT_KEY } from '../constants'
 import createWarnTooManyClasses from '../utils/createWarnTooManyClasses'
-
-import validAttr from '../utils/validAttr'
-import isTag from '../utils/isTag'
-import isStyledComponent from '../utils/isStyledComponent'
-import getComponentName from '../utils/getComponentName'
 import determineTheme from '../utils/determineTheme'
 import escape from '../utils/escape'
-import type { RuleSet, Target } from '../types'
-
-import { CHANNEL, CHANNEL_NEXT, CONTEXT_CHANNEL_SHAPE } from './ThemeProvider'
-import StyleSheet, { CONTEXT_KEY } from './StyleSheet'
+import generateDisplayName from '../utils/generateDisplayName'
+import getComponentName from '../utils/getComponentName'
+import isStyledComponent from '../utils/isStyledComponent'
+import isTag from '../utils/isTag'
+import validAttr from '../utils/validAttr'
 import ServerStyleSheet from './ServerStyleSheet'
+import StyleSheet from './StyleSheet'
+import { CHANNEL, CHANNEL_NEXT, CONTEXT_CHANNEL_SHAPE } from './ThemeProvider'
+
+import type { Theme } from './ThemeProvider'
+import type { RuleSet, Target } from '../types'
 
 // HACK for generating all static styles without needing to allocate
 // an empty execution context every single time...
 const STATIC_EXECUTION_CONTEXT = {}
+
+type BaseState = {
+  theme?: ?Theme,
+  generatedClassName?: string,
+}
 
 export default (ComponentStyle: Function, constructWithOptions: Function) => {
   const identifiers = {}
@@ -41,7 +47,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
       identifiers[displayName] = nr
 
       componentId = `${displayName}-${ComponentStyle.generateName(
-        displayName + nr,
+        displayName + nr
       )}`
     } else {
       componentId = `${displayName}-${ComponentStyle.generateName(displayName)}`
@@ -52,11 +58,12 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
       : componentId
   }
 
-  class BaseStyledComponent extends Component {
+  class BaseStyledComponent extends Component<*, BaseState> {
     static target: Target
     static styledComponentId: string
     static attrs: Object
     static componentStyle: Object
+    static defaultProps: Object
     static warnTooManyClasses: Function
 
     attrs = {}
@@ -91,20 +98,20 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
 
     generateAndInjectStyles(theme: any, props: any) {
       const { attrs, componentStyle, warnTooManyClasses } = this.constructor
-      const styleSheet = this.context[CONTEXT_KEY] || StyleSheet.instance
+      const styleSheet = this.context[CONTEXT_KEY] || StyleSheet.master
 
       // staticaly styled-components don't need to build an execution context object,
       // and shouldn't be increasing the number of class names
       if (componentStyle.isStatic && attrs === undefined) {
         return componentStyle.generateAndInjectStyles(
           STATIC_EXECUTION_CONTEXT,
-          styleSheet,
+          styleSheet
         )
       } else {
         const executionContext = this.buildExecutionContext(theme, props)
         const className = componentStyle.generateAndInjectStyles(
           executionContext,
-          styleSheet,
+          styleSheet
         )
 
         if (
@@ -127,7 +134,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
       if (componentStyle.isStatic) {
         const generatedClassName = this.generateAndInjectStyles(
           STATIC_EXECUTION_CONTEXT,
-          this.props,
+          this.props
         )
         this.setState({ generatedClassName })
         // If there is a theme in the context, subscribe to the event emitter. This
@@ -140,11 +147,11 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
           const theme = determineTheme(
             this.props,
             nextTheme,
-            this.constructor.defaultProps,
+            this.constructor.defaultProps
           )
           const generatedClassName = this.generateAndInjectStyles(
             theme,
-            this.props,
+            this.props
           )
 
           this.setState({ theme, generatedClassName })
@@ -154,7 +161,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
         const theme = this.props.theme || {}
         const generatedClassName = this.generateAndInjectStyles(
           theme,
-          this.props,
+          this.props
         )
         this.setState({ theme, generatedClassName })
       }
@@ -164,22 +171,22 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
       theme?: Theme,
       [key: string]: any,
     }) {
-      // If this is a staticaly-styled component, we don't need to listen to
+      // If this is a statically-styled component, we don't need to listen to
       // props changes to update styles
       const { componentStyle } = this.constructor
       if (componentStyle.isStatic) {
         return
       }
 
-      this.setState(oldState => {
+      this.setState(prevState => {
         const theme = determineTheme(
           nextProps,
-          oldState.theme,
-          this.constructor.defaultProps,
+          prevState.theme,
+          this.constructor.defaultProps
         )
         const generatedClassName = this.generateAndInjectStyles(
           theme,
-          nextProps,
+          nextProps
         )
 
         return { theme, generatedClassName }
@@ -208,7 +215,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
         .filter(Boolean)
         .join(' ')
 
-      const baseProps = {
+      const baseProps: any = {
         ...this.attrs,
         className,
       }
@@ -234,7 +241,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
 
           return acc
         },
-        baseProps,
+        baseProps
       )
 
       return createElement(target, propsForElement)
@@ -244,12 +251,11 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
   const createStyledComponent = (
     target: Target,
     options: Object,
-    rules: RuleSet,
+    rules: RuleSet
   ) => {
     const {
-      displayName = isTag(target)
-        ? `styled.${target}`
-        : `Styled(${getComponentName(target)})`,
+      isClass = !isTag(target),
+      displayName = generateDisplayName(target),
       componentId = generateId(options.displayName, options.parentComponentId),
       ParentComponent = BaseStyledComponent,
       rules: extendingRules,
@@ -264,7 +270,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
     const componentStyle = new ComponentStyle(
       extendingRules === undefined ? rules : extendingRules.concat(rules),
       attrs,
-      styledComponentId,
+      styledComponentId
     )
 
     class StyledComponent extends ParentComponent {
@@ -277,13 +283,7 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
         ]),
       }
 
-      static displayName = displayName
-      static styledComponentId = styledComponentId
-      static attrs = attrs
-      static componentStyle = componentStyle
-      static target = target
-
-      static withComponent(tag) {
+      static withComponent(tag: Target) {
         const { componentId: previousComponentId, ...optionsToCopy } = options
 
         const newComponentId =
@@ -327,6 +327,16 @@ export default (ComponentStyle: Function, constructWithOptions: Function) => {
     if (process.env.NODE_ENV !== 'production') {
       StyledComponent.warnTooManyClasses = createWarnTooManyClasses(displayName)
     }
+
+    if (isClass) hoist(StyledComponent, target)
+
+    // we do this after hoisting to ensure we're overwriting existing
+    // rules when wrapping another styled component class
+    StyledComponent.displayName = displayName
+    StyledComponent.styledComponentId = styledComponentId
+    StyledComponent.attrs = attrs
+    StyledComponent.componentStyle = componentStyle
+    StyledComponent.target = target
 
     return StyledComponent
   }

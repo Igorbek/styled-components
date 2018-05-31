@@ -1,5 +1,5 @@
 // @flow
-import React from 'react'
+import React, { Component } from 'react'
 import { mount, render } from 'enzyme'
 
 import { resetStyled, expectCSSMatches } from './utils'
@@ -375,7 +375,7 @@ describe('theming', () => {
 
   // https://github.com/styled-components/styled-components/issues/596
   it('should hoist static properties when using withTheme', () => {
-    class MyComponent extends React.Component {
+    class MyComponent extends Component<*, *> {
       static myStaticProperty: boolean = true
     }
 
@@ -384,8 +384,29 @@ describe('theming', () => {
     expect(MyComponentWithTheme.myStaticProperty).toBe(true)
   })
 
+  it('should only pass the theme prop', () => {
+    class Comp extends Component<*, *> {
+      render() {
+        return <div />
+      }
+    }
+
+    const CompWithTheme = withTheme(Comp)
+
+    const wrapper = mount(
+      <ThemeProvider theme={{}}>
+        <CompWithTheme />
+      </ThemeProvider>
+    )
+
+    const inner = wrapper.find(Comp).first()
+
+    expect(Object.keys(inner.props()).length).toEqual(1)
+    expect(inner.props()).toEqual({ theme: {} })
+  })
+
   it('should accept innerRef and pass it on as ref', () => {
-    class Comp extends React.Component {
+    class Comp extends Component<*, *> {
       render() {
         return <div />
       }
@@ -400,10 +421,9 @@ describe('theming', () => {
       </ThemeProvider>
     )
 
-    const inner = wrapper.find(Comp).first()
+    const inner = wrapper.find(Comp).first();
 
-    // $FlowFixMe
-    expect(ref).toHaveBeenCalledWith(inner.node)
+    expect(ref).toHaveBeenCalledWith(inner.instance())
     expect(inner.prop('innerRef')).toBe(undefined)
   })
 
@@ -437,7 +457,6 @@ describe('theming', () => {
 
     const inner = wrapper.find(Comp).first()
 
-    // $FlowFixMe
     expect(ref).toHaveBeenCalledWith(inner.getDOMNode())
     expect(inner.prop('innerRef')).toBe(ref)
   })
